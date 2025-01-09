@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Web程序设计综合案例</title>
+    <link rel="stylesheet" href="../../lib/element-plus.css">
+    <link rel="stylesheet" href="../../css/common.css">
+    <script src="../../lib/vue3.4.21.js"></script>
+    <script src="../../lib/element-plus.js"></script>
+    <script src="../../lib/element-plus-zh-cn.js"></script>
+    <script src="../../lib/axios.min.js"></script>
+    <script src="../../lib/http.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!--面包屑 高度30-->
+        <el-breadcrumb class="breadcrumb">
+            <el-breadcrumb-item v-for="item in breadcrumb"><el-button link>{{item}}</el-button></el-breadcrumb-item>
+        </el-breadcrumb>
+        <!--工具栏 高度50-->
+        <div id="toolbar">
+            <el-space>
+                <el-space>
+                    <el-input v-model="queryForm.realname" placeholder="课程名称" clearable></el-input>
+                </el-space>
+                <el-space>
+                    <el-button type="default" @click="query">查询</el-button>
+                </el-space>
+            </el-space>
+        </div>
+        <!--内容区 高度 100vh - 180 -->
+        <div id="table">
+            <el-table :data="tableData" border style="width: 100%">
+                <el-table-column prop="id" label="ID" width="100" align="center"></el-table-column>
+                <el-table-column prop="courseName" label="课程名称" align="center">
+                    <template #default="scope"> 
+                        <el-button link type="primary" @click="detail(scope.row)">{{scope.row.courseName}}</el-button>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="term" label="学期" align="center"></el-table-column>
+                <el-table-column prop="courseTime" label="上课时间" align="center"></el-table-column>
+                <el-table-column prop="location" label="上课地点" align="center"></el-table-column>
+                <el-table-column prop="realname" label="上课教师" align="center"></el-table-column>
+                <el-table-column prop="credit" label="学分" align="center"></el-table-column>
+                <el-table-column label="可选/总人数" align="center">
+                    <template #default="scope">
+                        <el-space>
+                            <el-space>
+                                <el-button type="danger" link v-if="scope.row.left>=0" @click="refresh([scope.row.id])">{{scope.row.left}}</el-button>
+                                <el-button type="danger" link size="small" @click="refresh([scope.row.id])" v-else>加载失败</el-button>
+                            </el-space>
+                            <el-space>
+                                /
+                            </el-space>
+                            <el-space>
+                                <el-text type="primary">{{scope.row.capacity}}</el-text>
+                            </el-space>
+                        </el-space>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="estatus" label="状态" align="center">
+                    <template #default="scope">
+                        <el-tag type="primary" v-if="scope.row.estatus==1">待确认</el-tag>
+                        <el-tag type="success" v-else-if="scope.row.estatus==2">已选课</el-tag>
+                        <el-tag type="default" v-else>未选</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="操作">
+                    <template #default="scope">
+                        <el-button size="small" link type="primary" v-if="scope.row.estatus==0 && (scope.row.left>0 || scope.row.left<0)" @click="choose(scope.row)">选课</el-button>
+                        <el-button size="small" link type="danger"  v-if="scope.row.estatus==1" @click="unchoose(scope.row.id)">退选</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+        <!--分页 高度50-->
+        <div id="pagination" >
+            <el-pagination background layout="total, prev, pager, next" :total="pageInfo.total" @current-change="pageChanged" />
+        </div>
+    </div>
+    <script>
+        const { createApp } = Vue;
+        const { ElLoading } = ElementPlus;
+        const app = createApp({
+            data(){
+                return {
+                    breadcrumb:['选课','选课'],
+                    queryForm:{
+                        courseName:'',
+                        term:''
+                    },
+                    pageInfo:{
+                        total: 0,
+                        page: 1,
+                        limit: 10
+                    },
+                    formData:{
+                        id: 0,
+                    },
+                    tableData: [],
+                    TermList:[
+                        '2023-2024-1', '2023-2024-2','2024-2025-1', '2024-2025-2'
+                    ],
+                    loading: null
+                }
+            },
+            methods:{
+                detail(row){
+                    ElMessageBox.alert(row.remark, row.courseName+"简介", {});
+                },
+                choose(row){
+                    const id = row.id
+                    if(row.left == 0){
+                        ElMessage.error("人数已满")
+                        return
+                    }
+                    ElMessageBox.confirm("您是否确认选课么？", "提示", {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning',
+                    }).then(res=>{
+
+                        this.loading = ElLoading.service({
+                            lock: true,
+                            text: 'Loading',
+                            background: 'rgba(0, 0, 0, 0.7)',
+                        })
+                        Api.selectCourse({id:id, action:1}).then(res=>{
+                            if(res.code==200){
+                                ElMessage.success("选课成功")
+                                this.query()
+                            }else{
+                                ElMessage.error(res.msg)
+                            }
+                            this.loading.close()
+                        }).catch((err)=>{
+                            this.loading.close()
+                        });
+            
+                    }).catch((err)=>{});
+                },
+                unchoose(id){
+                    ElMessageBox.confirm("您是否确认退选么？", "提示", {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning',
+                    }).then(res=>{
+                        Api.selectCourse({id:id, action:2}).then(res=>{
+                            if(res.code==200){
+                                ElMessage.success("退选成功")
+                                this.query()
+                            }else{
+                                ElMessage.error(res.msg)
+                            }
+                            this.loading.close()
+                        }).catch((err)=>{
+                            this.loading.close()
+                        });
+            
+                    }).catch((err)=>{});
+                },
+                refresh(ids){
+                    Api.getCourseStatus(ids).then(res=>{
+                        const data = res.data;
+                        for(var index in data){
+                            for(var i=0; i<this.tableData.length; i++){
+                                if(this.tableData[i].id == data[index].id){
+                                    this.tableData[i].left = data[index].left;
+                                    break
+                                }
+                            }
+                        }
+                    })
+                },
+                query(){
+                    const params = {
+                        page: this.pageInfo.page,
+                        limit: this.pageInfo.limit,
+                        ...this.queryForm
+                    }
+                    Api.getAvalibleCourseList(params).then(res=>{
+                        if(res.data.rows && res.data.rows.length>0){
+                            res.data.rows = res.data.rows.map(item=>{
+                                item.left = -1;
+                                return item;
+                            })
+                        }
+
+                        this.tableData = res.data.rows;
+                        this.pageInfo.total = res.data.total;
+                        if(res.data.rows.length>0){
+                            const ids = res.data.rows.map(item=>item.id);
+                            this.refresh(ids)
+                        }
+                    
+                    })
+                },
+                pageChanged(page){
+                    this.pageInfo.page = page;
+                    this.query()
+                }
+            },
+            mounted(){
+                // 初始化增删改查组件
+                this.query()
+            }
+        });
+        app.use(ElementPlus,{locale:zhCn}).mount('#app');
+    </script>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<script>
+    const { createApp } = Vue;
+    const app = createApp({
+        data() {
+            return {
+                breadcrumb: ['宿舍管理', '宿舍列表'],
+                queryForm: { dormitoryName: '' },
+                pageInfo: { total: 0, page: 1, limit: 10 },
+                formData: { id: 0, name: '', building: '', capacity: 4 },
+                tableData: [],
+                dialogTitle: '',
+                dialogVisible: false,
+                rules: {
+                    name: [
+                        { required: true, message: '请输入宿舍名称', trigger: 'blur' },
+                        { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
+                    ],
+                    building: [
+                        { required: true, message: '请输入楼栋', trigger: 'blur' }
+                    ],
+                    capacity: [
+                        { required: true, message: '请输入容纳人数', trigger: 'change' }
+                    ]
+                }
+            };
+        },
+        methods: {
+            query() {
+                // 发起 API 请求
+                axios
+                    .get('/api/dormitory/list', {
+                        params: {
+                            page: this.pageInfo.page,
+                            limit: this.pageInfo.limit,
+                            dormitoryName: this.queryForm.dormitoryName
+                        }
+                    })
+                    .then((response) => {
+                        const res = response.data;
+                        if (res.code === 200) {
+                            this.tableData = res.data.list; // 表格数据
+                            this.pageInfo.total = res.data.total; // 总记录数
+                        } else {
+                            this.$message.error(res.msg || '查询失败');
+                        }
+                    })
+                    .catch((error) => {
+                        console.error(error);
+                        this.$message.error('服务器错误，请稍后再试');
+                    });
+            },
+            add() {
+                this.dialogTitle = '添加宿舍';
+                this.formData = { id: 0, name: '', building: '', capacity: 4 };
+                this.dialogVisible = true;
+            },
+            edit(row) {
+                this.dialogTitle = '编辑宿舍';
+                this.formData = { ...row };
+                this.dialogVisible = true;
+            },
+            save() {
+                this.$refs.formRef.validate((valid) => {
+                    if (valid) {
+                        const api = this.formData.id === 0 ? '/api/dormitory/add' : '/api/dormitory/edit';
+                        axios
+                            .post(api, this.formData)
+                            .then((response) => {
+                                const res = response.data;
+                                if (res.code === 200) {
+                                    this.$message.success('保存成功');
+                                    this.dialogVisible = false;
+                                    this.query();
+                                } else {
+                                    this.$message.error(res.msg || '保存失败');
+                                }
+                            })
+                            .catch((error) => {
+                                console.error(error);
+                                this.$message.error('服务器错误，请稍后再试');
+                            });
+                    }
+                });
+            },
+            del(id) {
+                this.$confirm('确认删除该宿舍？', '提示', {
+                    confirmButtonText: '确定',
+                    cancelButtonText: '取消',
+                    type: 'warning'
+                }).then(() => {
+                    axios
+                        .post('/api/dormitory/del', { id })
+                        .then((response) => {
+                            const res = response.data;
+                            if (res.code === 200) {
+                                this.$message.success('删除成功');
+                                this.query();
+                            } else {
+                                this.$message.error(res.msg || '删除失败');
+                            }
+                        })
+                        .catch((error) => {
+                            console.error(error);
+                            this.$message.error('服务器错误，请稍后再试');
+                        });
+                });
+            },
+            pageChanged(page) {
+                this.pageInfo.page = page;
+                this.query();
+            },
+            hasPermission(path) {
+                return true; // 模拟权限逻辑，可以根据实际需要实现
+            }
+        },
+        mounted() {
+            this.query(); // 初始化加载数据
+        }
+    });
+
+    app.use(ElementPlus, { locale: zhCn }).mount('#app');
+</script>

@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学生管理</title>
+    <link rel="stylesheet" href="../../lib/element-plus.css">
+    <link rel="stylesheet" href="../../css/common.css">
+    <script src="../../lib/vue3.4.21.js"></script>
+    <script src="../../lib/element-plus.js"></script>
+    <script src="../../lib/element-plus-zh-cn.js"></script>
+    <script src="../../lib/axios.min.js"></script>
+    <script src="../../lib/http.js"></script>
+    <script src="../../lib/curd.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- 面包屑 -->
+        <el-breadcrumb class="breadcrumb">
+            <el-breadcrumb-item v-for="item in breadcrumb" :key="item">
+                <el-button link>{{ item }}</el-button>
+            </el-breadcrumb-item>
+        </el-breadcrumb>
+
+        <!-- 工具栏 -->
+        <div id="toolbar">
+            <el-space>
+                <el-input v-model="queryForm.studentName" placeholder="学生姓名" clearable></el-input>
+                <el-button type="default" @click="query" v-if="hasPermission('/api/student/list')">查询</el-button>
+            </el-space>
+        </div>
+
+        <!-- 学生列表 -->
+        <el-table
+            :data="tableData"
+            border
+            style="width: 100%"
+            :row-key="row => row.id"
+        >
+            <el-table-column prop="username" label="学号" align="center"></el-table-column>
+            <el-table-column prop="realname" label="姓名" align="center"></el-table-column>
+            <el-table-column prop="className" label="班级" align="center"></el-table-column>
+            <!-- <el-table-column prop="gender" label="性别" align="center">
+                <template #default="scope">
+                    <span>{{ scope.row.gender === 1 ? '男' : '女' }}</span>
+                </template>
+            </el-table-column> -->
+            <el-table-column label="宿舍信息" align="center">
+                <template #default="scope">
+                    <span v-if="scope.row.dormitoryInfo">
+                        {{ scope.row.collegeDormitoryBedNumber }}
+                    </span>
+                    <span v-else>未入住</span>
+                </template>
+            </el-table-column>
+            <el-table-column prop="status" label="状态" align="center">
+                <template #default="scope">
+                    <el-tag :type="scope.row.status === '1' ? 'success' : 'warning'">
+                        {{ scope.row.status === '1' ? '账号正常' : '账号停用' }}
+                    </el-tag>
+                </template>
+            </el-table-column>
+            <el-table-column label="操作" align="center">
+                <template #default="scope">
+                    <el-button size="small" link type="primary" @click="edit(scope.row)" v-if="hasPermission('/api/student/edit')">编辑</el-button>
+                    <el-button size="small" link type="danger" @click="confirmDel(scope.row.nowBedId)" v-if="hasPermission('/api/bed/del')">退出宿舍</el-button>
+                </template>
+            </el-table-column>
+        </el-table>
+
+        <!-- 分页 -->
+        <div id="pagination" style="display: flex; justify-content: flex-start; align-items: center; margin-top: 10px;">
+            <el-pagination
+                background
+                layout="total, sizes, prev, pager, next"
+                :total="pageInfo.total"
+                :page-size="pageInfo.limit"
+                :page-sizes="[5, 10, 20, 50]"
+                :current-page="pageInfo.page"
+                @size-change="pageSizeChanged"
+                @current-change="pageChanged"
+            />
+        </div>
+
+        <!-- 弹窗 -->
+        <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500">
+            <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px">
+                <!-- <el-form-item label="学号" prop="username">
+                    <el-input v-model="formData.username" placeholder="学号" readonly />
+                </el-form-item>
+                <el-form-item label="姓名" prop="realname">
+                    <el-input v-model="formData.realname" placeholder="姓名" />
+                </el-form-item>
+                <el-form-item label="班级" prop="className">
+                    <el-input v-model="formData.className" placeholder="班级" />
+                </el-form-item> -->
+                <!-- <el-form-item label="性别" prop="gender">
+                    <el-radio-group v-model="formData.gender">
+                        <el-radio :label="1">男</el-radio>
+                        <el-radio :label="0">女</el-radio>
+                    </el-radio-group>
+                </el-form-item> -->
+                <!-- <el-form-item label="状态" prop="status">
+                    <el-select v-model="formData.status" placeholder="请选择状态">
+                        <el-option label="正常" :value="'1'" />
+                        <el-option label="停用" :value="'0'" />
+                    </el-select>
+                </el-form-item> -->
+                <el-form-item label="宿舍" prop="prevBedId">
+                    <el-select
+                        v-model="formData.nowBedId"
+                        placeholder="请选择宿舍"
+                        :loading="loading"
+                    >
+                        <el-option
+                        v-for="bed in beds"
+                        :key="bed.id"
+                        :label="bed.collegeDormitoryBedNumber"
+                        :value="bed.id"
+                        />
+                    </el-select>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="dialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="save">保存</el-button>
+            </template>
+        </el-dialog>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        const app = createApp({
+            data() {
+                return {
+                    breadcrumb: ['学生管理'],
+                    queryForm: { studentName: '' },
+                    pageInfo: { total: 0, page: 1, limit: 10 },
+                    formData: { id: '', realname: '', className: '', gender: 1, status: 1 ,nowBedId: null , prevBedId: null},
+                    tableData: [],
+                    dialogTitle: '',
+                    dialogVisible: false,
+                    beds: [],
+                    loading: false,
+                    rules: {
+                        realname: [
+                            { required: true, message: '请输入姓名', trigger: 'blur' }
+                        ],
+                        className: [
+                            { required: true, message: '请输入班级', trigger: 'blur' }
+                        ],
+                        gender: [
+                            { required: true, message: '请选择性别', trigger: 'change' }
+                        ],
+                        status: [
+                            { required: true, message: '请选择状态', trigger: 'change' }
+                        ]
+                    }
+                };
+            },
+            methods: {
+                query() {
+                    const params = {
+                        page: this.pageInfo.page,
+                        limit: this.pageInfo.limit,
+                        studentName: this.queryForm.studentName
+                    };
+
+                    Api.getStudentList(params).then((res) => {
+                        this.tableData = res.data.list || [];
+                        this.pageInfo.total = res.data.total || 0;
+                    }).catch((err) => {
+                        console.error("Query failed:", err);
+                        this.tableData = [];
+                    });
+                },
+                edit(row) {
+                    this.resetBeds(row)
+                    this.formData = { ...row };
+                    this.dialogTitle = '编辑学生';
+                    this.dialogVisible = true;
+                },
+                save() {
+                    this.$refs.formRef.validate((valid) => {
+                        if (valid) {
+                            const action =  Api.editStudent;
+                            action({
+                                'userId':this.formData.id,
+                                'nowBedId':this.formData.nowBedId,
+                                'prevBedId':this.formData.prevBedId
+                            }).then((res) => {
+                                if (res.code === 200) {
+                                    this.$message.success('操作成功');
+                                    this.dialogVisible = false;
+                                    this.query();
+                                }
+                            });
+                        }
+                    });
+                },
+                confirmDel(id) {
+                    this.$confirm('确定删除该学生吗？', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(() => {
+                        console.log(id)
+                        Api.delStudent(id).then(() => this.query());
+                    });
+                },
+                pageChanged(page) {
+                    this.pageInfo.page = page;
+                    this.query();
+                },
+                pageSizeChanged(size) {
+                    this.pageInfo.limit = size;
+                    this.query();
+                },
+                viewDetails(row) {
+                    this.dialogVisible = true;
+                    this.dialogTitle = `${row.realname}的详细信息`;
+                    this.formData = { ...row };
+                },
+                hasPermission(path) {
+                    return HasAuth(path);
+                },
+                resetForm(title) {
+                    this.formData = { id: '', realname: '', className: '', gender: 1, status: 1 };
+                    this.dialogTitle = title;
+                    this.dialogVisible = true;
+                    this.$nextTick(() => {
+                        this.$refs.formRef?.resetFields();
+                    });
+                },
+                resetBeds(row){
+                    Api.getNoUseAll().then((res) => {
+                        this.loading = true;
+                        this.beds = res.data
+                        this.beds.push({
+                            'id':row.nowBedId,
+                            'collegeDormitoryBedNumber':row.collegeDormitoryBedNumber
+                        })
+                        this.loading = false;
+                    }).catch((err) => {
+                        console.error("Query failed:", err);
+                        this.beds = [];
+                        this.loading = false;
+                    });
+                }
+            },
+            mounted() {
+                this.query();
+            }
+        });
+        app.use(ElementPlus, { locale: zhCn }).mount('#app');
+    </script>
+</body>
+</html>

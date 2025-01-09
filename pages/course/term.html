@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Web程序设计综合案例</title>
+    <link rel="stylesheet" href="../../lib/element-plus.css">
+    <link rel="stylesheet" href="../../css/common.css">
+    <script src="../../lib/vue3.4.21.js"></script>
+    <script src="../../lib/element-plus.js"></script>
+    <script src="../../lib/element-plus-zh-cn.js"></script>
+    <script src="../../lib/axios.min.js"></script>
+    <script src="../../lib/http.js"></script>
+    <script src="../../lib/curd.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!--面包屑 高度30-->
+        <el-breadcrumb class="breadcrumb">
+            <el-breadcrumb-item v-for="item in breadcrumb"><el-button link>{{item}}</el-button></el-breadcrumb-item>
+        </el-breadcrumb>
+        <!--工具栏 高度50-->
+        <div id="toolbar">
+            <el-space>
+                <el-space>
+                    <el-button type="default" @click="query">刷新</el-button>
+                </el-space>
+                <el-space>
+                    <el-button type="primary" @click="add" >添加</el-button>
+                </el-space>
+            </el-space>
+        </div>
+        <!--内容区 高度 100vh - 180 -->
+        <div id="table">
+            <el-table 
+                :data="tableData" 
+                :default-expand-all="isExpandAll"
+                show-overflow-tooltip
+                border 
+                style="width: 100%" 
+                :default-expand-all="true" 
+            >
+                <el-table-column prop="termName" label="学期名称"align="center"></el-table-column>
+                <el-table-column prop="remark" label="备注" align="center"></el-table-column>
+                <el-table-column label="操作">
+                    <template #default="scope">
+                        <el-button size="small" type="primary" @click="edit(scope.row)" >编辑</el-button>
+                        <el-button size="small" type="danger"  @click="del(scope.row.id)" >删除</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+        <!--分页 高度50-->
+        <div id="pagination" >
+            <!-- <el-pagination background layout="total, prev, pager, next" :total="pageInfo.total" @current-change="pageChanged" /> -->
+        </div>
+        <el-dialog
+            v-model="dialogVisible"
+            :title="dialogTitle"
+            width="500"
+        >
+            <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px" style="max-width: 600px">
+                <el-form-item label="学期名称" prop="termName">
+                    <el-input v-model="formData.termName" placeholder="学期名称" />
+                </el-form-item>
+                <el-form-item label="备注" prop="remark" v-else>
+                    <el-input type="textarea" :rows="5" v-model="formData.remark" placeholder="备注" />
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <div class="dialog-footer">
+                    <el-button @click="dialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="save">保存</el-button>
+                </div>
+            </template>
+        </el-dialog>
+    </div>
+    <script>
+        const {createApp} = Vue;
+        const app = createApp({
+            data(){
+                return {
+                    breadcrumb:['选课','学期管理'],
+                    queryForm:{
+                        termName:''
+                    },
+                    pageInfo:{
+                        total: 0,
+                        page: 1,
+                        limit: 10
+                    },
+                    formData:{
+                        id: 0,
+                        termName: '',
+                        remark: ''
+                    },
+                    tableData: [],
+                    dialogTitle: '',
+                    dialogVisible: false,
+                    rules: {
+                        termName: [
+                            { required: true, message: '请输入学期', trigger: 'blur' }
+                        ]
+                    },
+                    depTreeList:[],
+                    formRef: null
+                }
+            },
+            methods:{
+                add(){
+                    this.formData.id   = 0;
+                    this.dialogTitle   = '添加部门'
+                    this.dialogVisible = true;
+                    this.$nextTick(()=>{
+                        this.$refs.formRef.resetFields();
+                    });
+                },
+                edit(row){
+                    this.dialogTitle   = '编辑部门'
+                    this.dialogVisible = true;
+                    this.formData.id = row.id;
+                    this.formData.termName = row.termName;
+                    this.formData.remark  = row.remark;
+                },
+                save(){
+                    this.$refs.formRef.validate((valid) => {
+                        if (valid) {
+                            if(this.formData.id==0){
+                                CURD.add()
+                            }else{
+                                CURD.edit()
+                            }
+                        }else{
+                            return false;
+                        }
+                    });
+
+                },
+                del(id){
+                    CURD.del(id);
+                },
+                query(){
+                    CURD.query()
+                },
+                hasPermission(path){
+                    return HasAuth(path);
+                }
+            },
+            mounted(){
+                // 初始化增删改查组件
+                CURD.init(this, Api.getTermList, Api.addTerm, Api.editTerm, Api.delTerm);
+
+                CURD.query()
+            }
+        });
+        app.use(ElementPlus,{locale:zhCn}).mount('#app');
+    </script>
+</body>
+</html>

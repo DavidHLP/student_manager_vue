@@ -1,0 +1,29 @@
+body{
+    margin:0;
+    padding:0;
+}
+.breadcrumb{
+    height:20px;
+    padding:5px;
+    background: #EEE;
+}
+
+div#toolbar{
+    padding:5px 5px 0px 5px;
+    height:40px;
+}
+
+div#table{
+    height: calc(100vh - 130px);
+    overflow:auth;
+}
+
+div#pagination{
+    margin-top:10px;
+    height:40px;
+    text-align: right;
+}
+.el-pagination{
+    float: right;
+    margin:0px 10px
+}

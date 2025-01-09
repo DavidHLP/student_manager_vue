@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Web程序设计综合案例</title>
+    <link rel="stylesheet" href="../../lib/element-plus.css">
+    <link rel="stylesheet" href="../../css/common.css">
+    <script src="../../lib/vue3.4.21.js"></script>
+    <script src="../../lib/element-plus.js"></script>
+    <script src="../../lib/element-plus-zh-cn.js"></script>
+    <script src="../../lib/axios.min.js"></script>
+    <script src="../../lib/http.js"></script>
+    <script src="../../lib/curd.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!--面包屑 高度30-->
+        <el-breadcrumb class="breadcrumb">
+            <el-breadcrumb-item v-for="item in breadcrumb"><el-button link>{{item}}</el-button></el-breadcrumb-item>
+        </el-breadcrumb>
+        <!--工具栏 高度50-->
+        <div id="toolbar">
+            <el-space>
+                <el-space>
+                    <el-button type="default" @click="query">刷新</el-button>
+                </el-space>
+            </el-space>
+        </div>
+        <!--内容区 高度 100vh - 180 -->
+        <div id="table">
+            <el-table :data="tableData" border style="width: 100%">
+                <el-table-column prop="courseName" label="课程名称" align="center"></el-table-column>
+                <el-table-column prop="term" label="学期" align="center"></el-table-column>
+                <el-table-column prop="courseTime" label="上课时间" align="center"></el-table-column>
+                <el-table-column prop="location" label="上课地点" align="center"></el-table-column>
+                <el-table-column prop="realname" label="上课教师" align="center"></el-table-column>
+                <el-table-column prop="credit" label="学分" align="center"></el-table-column>
+                <el-table-column prop="status" label="课程状态" align="center">
+                    <template #default="scope">
+                        <el-tag type="success" v-if="scope.row.status==0">未发布</el-tag>
+                        <el-tag type="success" v-else-if="scope.row.status==1">开放选课</el-tag>
+                        <el-tag type="default" v-else>结束选课</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="estatus" label="选课状态" align="center">
+                    <template #default="scope">
+                        <el-tag type="danger" v-if="scope.row.estatus==1">待确认</el-tag>
+                        <el-tag type="success" v-else-if="scope.row.estatus==2">已确认</el-tag>
+                        <el-tag type="default" v-else>已取消</el-tag>
+                    </template>
+                </el-table-column>
+                <!-- <el-table-column prop="score" label="分数" align="center"></el-table-column> -->
+                <el-table-column prop="etime" label="选课时间" align="center"></el-table-column>
+                <el-table-column label="操作">
+                    <template #default="scope">
+                        <el-button size="small" link type="danger"  v-if="scope.row.estatus==1" @click="unchoose(scope.row.id)">退选</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+        <!--分页 高度50-->
+        <div id="pagination" >
+            
+        </div>
+    </div>
+    <script>
+        const {createApp} = Vue;
+        const app = createApp({
+            data(){
+                return {
+                    breadcrumb:['选课','我的课程'],
+                    pageInfo:{
+                        total: 0,
+                        page: 1,
+                        limit: 10
+                    },
+                    tableData: []
+                }
+            },
+            methods:{
+                query(){
+                    Api.getMyCourseList().then(res=>{
+                        this.tableData = res.data
+                    })
+                },
+                unchoose(id){
+                    ElMessageBox.confirm("您是否确认退选么？", "提示", {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning',
+                    }).then(res=>{
+                        Api.selectCourse({id:id, action:2}).then(res=>{
+                            if(res.code==200){
+                                ElMessage.success("退选成功")
+                                this.query()
+                            }else{
+                                ElMessage.error(res.msg)
+                            }
+                            this.loading.close()
+                        }).catch((err)=>{
+                            this.loading.close()
+                        });
+            
+                    }).catch((err)=>{});
+                },
+                hasPermission(path){
+                    return HasAuth(path);
+                }
+            },
+            mounted(){
+                this.query()
+            }
+        });
+        app.use(ElementPlus,{locale:zhCn}).mount('#app');
+    </script>
+</body>
+</html>

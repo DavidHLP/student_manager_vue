@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Web程序设计综合案例</title>
+    <link rel="stylesheet" href="../../lib/element-plus.css">
+    <link rel="stylesheet" href="../../css/common.css">
+    <script src="../../lib/vue3.4.21.js"></script>
+    <script src="../../lib/element-plus.js"></script>
+    <script src="../../lib/element-plus-zh-cn.js"></script>
+    <script src="../../lib/axios.min.js"></script>
+    <script src="../../lib/http.js"></script>
+    <script src="../../lib/curd.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!--面包屑 高度30-->
+        <el-breadcrumb class="breadcrumb">
+            <el-breadcrumb-item v-for="item in breadcrumb"><el-button link>{{item}}</el-button></el-breadcrumb-item>
+        </el-breadcrumb>
+        <!--工具栏 高度50-->
+        <div id="toolbar">
+            <el-space>
+                <el-space>
+                    <el-button type="default" @click="query">刷新</el-button>
+                </el-space>
+                <el-space>
+                    <el-button type="primary" @click="add" v-if="hasPermission('/api/menu/add')">添加</el-button>
+                </el-space>
+            </el-space>
+        </div>
+        <!--内容区 高度 100vh - 180 -->
+        <div id="table">
+            <el-table 
+                :data="tableData" 
+                :default-expand-all="isExpandAll"
+                show-overflow-tooltip
+                border 
+                style="width: 100%" 
+                :default-expand-all="true" 
+                row-key="id"
+            >
+                <el-table-column prop="menuName" label="菜单名称" align="left"></el-table-column>
+                <el-table-column prop="path" label="路由地址" align="left"></el-table-column>
+                <el-table-column prop="menuType" label="菜单类型" width="100" align="center">
+                    <template #default="scope">
+                        <el-tag type="success" v-if="scope.row.menuType=='C'">菜单</el-tag>
+                        <el-tag type="default" v-else-if="scope.row.menuType=='M'">目录</el-tag>
+                        <el-tag type="primary" v-else>按钮</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="status" label="状态" width="100" align="center">
+                    <template #default="scope">
+                        <el-tag type="success" v-if="scope.row.status==1">正常</el-tag>
+                        <el-tag type="default" v-else>禁用</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="remark" label="备注" width="150" align="center"></el-table-column>
+                <el-table-column label="操作" width="200" align="center">
+                    <template #default="scope">
+                        <el-button size="small" type="primary" @click="edit(scope.row)"  v-if="hasPermission('/api/menu/edit')">编辑</el-button>
+                        <el-button size="small" type="danger"  @click="del(scope.row.id)"  v-if="hasPermission('/api/menu/del')">删除</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+        <!--分页 高度50-->
+        <div id="pagination" >
+            
+        </div>
+        <el-dialog
+            v-model="dialogVisible"
+            :title="dialogTitle"
+            width="500"
+        >
+            <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px" style="max-width: 600px">
+                <el-form-item label="上级菜单" prop="pid">
+                    <el-tree-select
+                        v-model="formData.pid"
+                        node-key="id"
+                        :clearable="clearable"
+                        placeholder="菜单"
+                        :data="menuTreeList"
+                        :render-after-expand="false"
+                        :props="{ label: 'name', children: 'children' }"
+                        check-strictly
+                    >
+                </el-form-item>
+                <el-form-item label="菜单名称" prop="menuName">
+                    <el-input v-model="formData.menuName" placeholder="菜单名称" />
+                </el-form-item>
+                <el-form-item label="菜单类型" prop="menuType">
+                    <el-radio-group v-model="formData.menuType">
+                        <el-radio-button value="M">目录</el-radio-button>
+                        <el-radio-button value="C">菜单</el-radio-button>
+                        <el-radio-button value="F">按钮</el-radio-button>
+                    </el-radio-group>
+                </el-form-item>
+                <el-form-item label="显示序号" prop="orderNum">
+                    <el-input-number v-model="formData.orderNum" placeholder="菜单名称" />
+                </el-form-item>
+                <el-form-item label="路由地址" prop="path">
+                    <el-input v-model="formData.path" placeholder="路由地址" />
+                </el-form-item>
+                <el-form-item label="状态" prop="status">
+                    <el-radio-group v-model="formData.status">
+                        <el-radio-button :value="1">正常</el-radio-button>
+                        <el-radio-button :value="2">禁用</el-radio-button>
+                    </el-radio-group>
+                </el-form-item>
+                <el-form-item label="备注" prop="remark" v-else>
+                    <el-input type="textarea" :rows="5" v-model="formData.remark" placeholder="备注" />
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <div class="dialog-footer">
+                    <el-button @click="dialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="save">保存</el-button>
+                </div>
+            </template>
+        </el-dialog>
+    </div>
+    <script>
+        const {createApp} = Vue;
+        const app = createApp({
+            data(){
+                return {
+                    breadcrumb:['系统管理','菜单管理'],
+                    queryForm:{
+                        dep_name:''
+                    },
+                    pageInfo:{
+                        total: 0,
+                        page: 1,
+                        limit: 10
+                    },
+                    formData:{
+                        id: 0,
+                        pid: '',
+                        menuName: '',
+                        menuType: 'M',
+                        orderNum: 0,
+                        path: '',
+                        status: 1,
+                        remark: ''
+                    },
+                    tableData: [],
+                    dialogTitle: '',
+                    dialogVisible: false,
+                    rules: {
+                        menuName: [
+                            { required: true, message: '请输入菜单名称', trigger: 'blur' }
+                        ]
+                    },
+                    menuTreeList:[],
+                    formRef: null
+                }
+            },
+            methods:{
+                add(){
+                    this.formData.id   = 0;
+                    this.dialogTitle   = '添加菜单'
+                    this.dialogVisible = true;
+                    
+                    this.$nextTick(()=>{
+                        this.$refs.formRef.resetFields();
+                    });
+                },
+                edit(row){
+                    this.dialogTitle   = '编辑菜单'
+                    this.dialogVisible = true;
+
+                    this.formData.id = row.id;
+                    this.formData.pid = row.pid;
+                    this.formData.menuName = row.menuName;
+                    this.formData.menuType = row.menuType;
+                    this.formData.orderNum = row.orderNum;
+                    this.formData.path = row.path;
+                    this.formData.status = row.status;
+                    this.formData.remark = row.remark;
+
+                },
+                save(){
+                    this.$refs.formRef.validate((valid) => {
+                        if (valid) {
+                            if(this.formData.id==0){
+                                CURD.add()
+                            }else{
+                                CURD.edit()
+                            }
+                        }else{
+                            return false;
+                        }
+                    });
+
+                },
+                del(id){
+                    CURD.del(id);
+                },
+                query(){
+                    CURD.query()
+                },
+                hasPermission(path){
+                    return HasAuth(path);
+                }
+            },
+            mounted(){
+                // 初始化增删改查组件
+                CURD.init(this, Api.getMenuList, Api.addMenu, Api.editMenu, Api.delMenu);
+                CURD.query = ()=>{
+                    CURD.queryApi({}).then(res=>{
+                        this.tableData = res.data;
+                    })
+                }
+                this.query()
+
+                Api.getMenuTreeList().then(res=>{
+                    this.menuTreeList = res.data;
+                })
+            }
+        });
+        app.use(ElementPlus,{locale:zhCn}).mount('#app');
+    </script>
+</body>
+</html>

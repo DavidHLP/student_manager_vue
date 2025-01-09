@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Web程序设计综合案例</title>
+    <link rel="stylesheet" href="./lib/element-plus.css">
+    <script src="./lib/vue3.4.21.js"></script>
+    <script src="./lib/element-plus.js"></script>
+    <script src="./lib/axios.min.js"></script>
+    <script src="./lib/http.js"></script>
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-image: url(./img/bg.png);
+        }
+        #loginForm{
+            width: 500px;
+            position:absolute;
+            left: 50%;
+            top: 50%;
+            margin-left: -200px;
+            margin-top: -200px;
+            background-color: rgba(255,255,255,0.85);
+            border-radius: 10px;
+            padding-bottom:30px;
+        }
+        #loginForm .title{
+            padding:30px 10px;
+            font-size: 30px;
+            text-align: center;
+        }
+        #loginForm .form{
+            margin: 40px 60px 40px 40px;
+        }
+        #loginForm .version{
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="loginForm">
+            <div class="title">Web程序设计综合案例</div>
+            <el-divider>系统登陆</el-divider>
+            <div class="form">
+                <el-form :model="loginInfo" :rules="rules" ref="formRef" label-width="100px" >
+                    <el-form-item label="账号" prop="username" >
+                        <el-input v-model="loginInfo.username" placeholder="账号" />
+                    </el-form-item>
+                    <el-form-item label="密码" prop="password">
+                        <el-input v-model="loginInfo.password" type="password" placeholder="密码" />
+                    </el-form-item>
+                    <el-form-item label="" prop="">
+                        <el-checkbox v-model="remember" label="自动登录" size="large" />
+                    </el-form-item>
+                    <el-form-item label="" prop="">
+                        <el-button type="primary" style="width:100%" @click="login">登录</el-button>
+                    </el-form-item>
+                </el-form>
+            </div>
+            <div class="version">
+                <el-text type="default">v1.0</el-text>
+            </div>
+        </div>
+    </div>
+    <script>
+        const pathMap = {}
+        const { createApp } = Vue;
+
+        const app = createApp({
+            data(){
+                return {
+                    loginInfo: {
+                        username: '',
+                        password: ''
+                    },
+                    remember: false,
+                    rules: {
+                        username: [
+                            { required: true, message: '请输入账号', trigger: 'blur' },
+                            { min: 1, max: 20, message: '长度在 1 到 20 个字符', trigger: 'blur' }
+                        ],
+                        password: [
+                            { required: true, message: '请输入密码', trigger: 'blur' },
+                            { min: 1, max: 20, message: '长度在 1 到 20 个字符', trigger: 'blur' }
+                        ]
+                    },
+                    formRef: null
+                }
+            },
+            methods:{
+                login(){
+
+                    this.$refs.formRef.validate((valid) => {
+                        if (valid) {
+                            Api.loginApi(this.loginInfo).then(res => {
+                                if(res.code == 200){
+                                    ElMessage.success('登录成功');
+
+                                    localStorage.setItem("userInfo", JSON.stringify(res.data));
+                                    localStorage.setItem("token", res.data.token);
+                                    localStorage.setItem('realname', res.data.realname);
+
+                                    setTimeout(()=>{
+                                        if(this.remember){
+                                            localStorage.setItem('username', this.loginInfo.username);
+                                            localStorage.setItem('password', this.loginInfo.password);
+                                            localStorage.setItem('remember', 1);
+                                        }
+                                        window.location.href = baseUrl + 'index.html';
+                                    },1000)
+                                    
+                                }else{
+                                    ElMessage.error(res.msg);
+                                }
+                            });
+                        }else{
+                            return false;
+                        }
+                    });
+                }
+            },
+            mounted(){
+                const un = localStorage.getItem('username');
+                const pw = localStorage.getItem('password');
+                const re = localStorage.getItem('remember');
+                if(re && un && pw){
+                    this.loginInfo.username = un;
+                    this.loginInfo.password = pw;
+                    this.remember = true;
+                }
+                
+            }
+        });
+        app.use(ElementPlus).mount('#app');
+    </script>
+</body>
+</html>

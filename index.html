@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>学生管理系统</title>
+    <link rel="stylesheet" href="./lib/element-plus.css">
+    <link rel="stylesheet" href="./css/index.css">
+    <script src="./lib/vue3.4.21.js"></script>
+    <script src="./lib/element-plus.js"></script>
+    <script src="./lib/axios.min.js"></script>
+    <script src="./lib/http.js"></script>
+</head>
+<body>
+    <div id="app">
+        <div id="header">
+            <div id="logo"><img src="./img/logo.png"></div>
+            <div id="title">学生管理系统</div>
+            <div id="buttons">
+                <div class="button">
+                    <el-button link style="color:white">{{currrent}}</el-button>
+                    <el-button link style="color:white">{{realname}}</el-button>
+                    <el-button type="danger" size="small" @click="quit">退出</el-button>
+                </div>
+            </div>
+        </div>
+        <div id="menu">
+            <el-menu :default-active="activeMenuIndex" >
+                <el-sub-menu v-for="(menu, index) in menus" :index="index+1">
+                    <template #title>
+                        <span>{{menu.name}}</span>
+                    </template>
+                    <el-menu-item v-for="(child, i) in menu.children" :index="(index+1) + '-' + (i+1)" @click="link(child.path)">
+                        {{child.name}}
+                    </el-menu-item>
+                </el-sub-menu>
+            </el-menu>
+        </div>
+        <div id="content">
+            <iframe :src="targetUrl" frameborder="" ></iframe>
+        </div>
+    </div>
+    <script>
+        const pathMap = {}
+
+        const { createApp } = Vue;
+
+        const app = createApp({
+            data(){
+                return {
+                    menus:[],
+                    currrent: '',
+                    targetUrl:'',
+                    activeMenuIndex: '1-1',
+                    realname:''
+                }
+            },
+            methods:{
+                link(path){
+                    if(pathMap[path] == undefined) {
+                        ElMessage.error("无访问权限或资源不存在");
+                        return;
+                    }
+                    location.href = baseUrl + '#' + path;
+                    this.targetUrl = pathMap[path].url;
+                    this.activeMenuIndex = pathMap[path].index;
+                },
+                quit(){
+                    ElMessageBox.confirm('确定退出吗?', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(()=>{
+                        Api.logoutApi().then(res=>{
+                            // 退出成功，跳转到登录页
+                            localStorage.removeItem("userInfo");
+                            localStorage.removeItem("token");
+                            location.href = baseUrl + 'login.html';
+                        })
+                    })
+                }
+            },
+            mounted(){
+
+               this.realname = JSON.parse(localStorage.getItem('userInfo')).realname;
+
+                setInterval(()=>{
+                    // 刷新当前时间
+                    this.currrent = new Date().toLocaleString();
+                }, 1000);
+
+                Api.getMenuApi().then(res=>{
+                    this.menus = res.data;
+
+                    // 生成路径映射表，方便后续跳转
+                    for(var i in res.data){
+                        for(var j in res.data[i].children){
+                            pathMap[res.data[i].children[j].path] = {
+                                url: './pages' + res.data[i].children[j].path+'.html',
+                                index: (parseInt(i)+1) + '-' + (parseInt(j)+1)
+                            };
+                        }
+                    }
+
+                    // 跳转到当前路由
+                    const url = location.hash.split('#')[1];
+                    if(url){
+                        // 跳转到指定路由
+                        this.link(url)
+                    }else{
+                        // 默认跳转到首页
+                        this.link('/dashboard')
+                    }
+                })
+
+                Api.getPermsApi().then(res=>{
+                    // 保存权限信息
+                    localStorage.setItem('permissions', JSON.stringify(res.data));
+                })
+            }
+        });
+        app.use(ElementPlus).mount('#app');
+    </script>
+</body>
+</html>

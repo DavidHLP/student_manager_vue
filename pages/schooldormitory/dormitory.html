@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>宿舍管理</title>
+    <link rel="stylesheet" href="../../lib/element-plus.css">
+    <link rel="stylesheet" href="../../css/common.css">
+    <script src="../../lib/vue3.4.21.js"></script>
+    <script src="../../lib/element-plus.js"></script>
+    <script src="../../lib/element-plus-zh-cn.js"></script>
+    <script src="../../lib/axios.min.js"></script>
+    <script src="../../lib/http.js"></script>
+    <script src="../../lib/curd.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- 面包屑 -->
+        <el-breadcrumb class="breadcrumb">
+            <el-breadcrumb-item v-for="item in breadcrumb" :key="item">
+                <el-button link>{{ item }}</el-button>
+            </el-breadcrumb-item>
+        </el-breadcrumb>
+
+        <!-- 工具栏 -->
+        <div id="toolbar">
+            <el-space>
+                <el-input v-model="queryForm.dormitoryName" placeholder="宿舍名称" clearable></el-input>
+                <el-button type="default" @click="query" v-if="hasPermission('/api/dormitory/list')">查询</el-button>
+                <el-button type="primary" @click="add" v-if="hasPermission('/api/dormitory/add')">添加</el-button>
+            </el-space>
+        </div>
+
+        <el-table
+            :data="tableData"
+            border
+            style="width: 100%"
+            :row-key="row => row.id"
+        >
+            <el-table-column type="expand">
+                <template #default="props">
+                    <el-card>
+                        <!-- 已占用床位 -->
+                        <el-divider content-position="left">已占用床位</el-divider>
+                        <el-table
+                            :data="props.row.beds.filter(bed => bed.status === 'occupied')"
+                            class="nested-table"
+                            border
+                            style="width: 100%"
+                        >
+                            <el-table-column prop="username" label="学号" align="center"></el-table-column>
+                            <el-table-column prop="realname" label="姓名" align="center"></el-table-column>
+                            <el-table-column prop="className" label="班级" align="center"></el-table-column>
+                            <el-table-column prop="bedNumber" label="床位号" align="center"></el-table-column>
+                            <el-table-column prop="status" label="床位状态" align="center">
+                                <template #default="scope">
+                                    <el-tag type="danger">已占用</el-tag>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+            
+                        <!-- 未占用床位 -->
+                        <el-divider content-position="left">未占用床位</el-divider>
+                        <el-table
+                            :data="props.row.beds.filter(bed => bed.status === 'available')"
+                            class="nested-table"
+                            border
+                            style="width: 100%"
+                        >
+                            <el-table-column prop="bedNumber" label="床位号" align="center"></el-table-column>
+                            <el-table-column prop="status" label="床位状态" align="center">
+                                <template #default="scope">
+                                    <el-tag type="success">可用</el-tag>
+                                </template>
+                            </el-table-column>
+                        </el-table>
+                    </el-card>
+                </template>
+            </el-table-column>
+
+            <!-- 原有列 -->
+            <el-table-column prop="name" label="宿舍名称" align="center"></el-table-column>
+            <el-table-column prop="building" label="楼栋" align="center"></el-table-column>
+            <el-table-column prop="collegeId" label="所属书院" align="center">
+                <template #default="scope">
+                    <span>
+                        {{
+                            collegeData.find(college => college.id === scope.row.collegeId)?.name || '未分配'
+                        }}
+                    </span>
+                </template>
+            </el-table-column>
+            <el-table-column prop="capacity" label="容纳人数" align="center">
+                <template #default="scope">
+                    <el-tag type="success">{{ scope.row.capacity }}</el-tag>
+                </template>
+            </el-table-column>
+            <el-table-column prop="occupied" label="已入住人数" align="center">
+                <template #default="scope">
+                    <el-tag type="danger">{{ scope.row.occupied }}</el-tag>
+                </template>
+            </el-table-column>
+            <el-table-column label="剩余入住床位" align="center">
+                <template #default="scope">
+                    <el-tag type="primary">{{ scope.row.capacity - scope.row.occupied }}</el-tag>
+                </template>
+            </el-table-column>
+            <el-table-column label="操作" align="center">
+                <template #default="scope">
+                    <el-button size="small" link type="primary" @click="edit(scope.row)" v-if="hasPermission('/api/dormitory/edit')">编辑</el-button>
+                    <el-button size="small" link type="danger" @click="confirmDel(scope.row.id)" v-if="hasPermission('/api/dormitory/del')">删除</el-button>
+                </template>
+            </el-table-column>
+        </el-table>    
+        <!-- 分页 -->
+        <div id="pagination" style="display: flex; justify-content: flex-start; align-items: center; margin-top: 10px;">
+            <el-pagination
+                background
+                layout="total, sizes, prev, pager, next"
+                :total="pageInfo.total"
+                :page-size="pageInfo.limit"
+                :page-sizes="[5, 10, 20, 50]"
+                :current-page="pageInfo.page"
+                @size-change="pageSizeChanged"
+                @current-change="pageChanged"
+            />
+        </div>
+        <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500">
+            <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px">
+                <el-form-item label="宿舍名称" prop="name">
+                    <el-input v-model="formData.name" placeholder="宿舍名称" />
+                </el-form-item>
+        
+                <el-form-item label="楼栋" prop="building">
+                    <el-input v-model="formData.building" placeholder="楼栋" />
+                </el-form-item>
+        
+                <el-form-item label="容纳人数" prop="capacity">
+                    <el-input-number v-model="formData.capacity" placeholder="容纳人数" />
+                </el-form-item>
+                <el-form-item label="所属书院" prop="collegeId">
+                    <el-select v-model="formData.collegeId" placeholder="请选择书院">
+                        <el-option
+                            v-for="college in collegeData"
+                            :key="college.id"
+                            :label="college.name"
+                            :value="college.id"
+                        />
+                    </el-select>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="dialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="save">保存</el-button>
+            </template>
+        </el-dialog>                    
+    </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        const app = createApp({
+            data() {
+                return {
+                    breadcrumb: ['学校宿舍管理', '宿舍管理'],
+                    queryForm: { dormitoryName: '' },
+                    pageInfo: { total: 0, page: 1, limit: 10 },
+                    formData: { id: 0, name: '', building: '', capacity: 0 , occupied: 0},
+                    tableData: [],
+                    collegeData:[],
+                    dialogTitle: '',
+                    dialogVisible: false,
+                    rules: {
+                        name: [
+                            { required: true, message: '请输入宿舍名称', trigger: 'blur' },
+                            { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
+                        ],
+                        building: [
+                            { required: true, message: '请输入楼栋', trigger: 'blur' }
+                        ],
+                        capacity: [
+                            { required: true, message: '请输入容纳人数', trigger: 'change' }
+                        ]
+                    }
+                };
+            },
+            methods: {
+                query() {
+                    const params = {
+                        page: this.pageInfo.page,
+                        limit: this.pageInfo.limit,
+                        dormitoryName: this.queryForm.dormitoryName
+                    };
+
+                    Api.getDormitoryList(params).then((res) => {
+                        this.tableData = res.data.list.map(dormitory => ({
+                            ...dormitory,
+                            // 解析床位数据
+                            beds: dormitory.beds.map(bed => ({
+                                ...bed,
+                                realname: bed.user?.realname || '未分配',
+                                username: bed.user?.username || 'N/A',
+                                className: bed.user?.className || 'N/A'
+                            }))
+                        }));
+                        this.pageInfo.total = res.data.total || 0;
+                    }).catch((err) => {
+                        console.error("Query failed:", err);
+                        this.tableData = [];
+                    });
+                    Api.getCollegeAll().then((res) => {
+                        this.collegeData = res.data;
+                    });
+                },
+                add() {
+                    this.resetForm('添加宿舍');
+                },
+                edit(row) {
+                    this.formData = { ...row };   
+                    this.dialogTitle = '编辑宿舍';
+                    this.dialogVisible = true;
+                },
+                save() {
+                    // 保存编辑内容或添加新宿舍
+                    this.$refs.formRef.validate((valid) => {
+                        if (valid) {
+                            const action = this.formData.id === 0 ? Api.addDormitory : Api.editDormitory;
+                            action(this.formData)
+                            .then((res) => {
+                                if (res.code == 200) {
+                                    this.$message.success('操作成功');
+                                    this.dialogVisible = false;
+                                    this.query(); // 重新查询列表数据
+                                }
+                            })
+                        }
+                    });
+                },
+                confirmDel(id) {
+                    this.$confirm('确定删除该宿舍吗？', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(() => {
+                        Api.delDormitory(id).then(() => this.query());
+                    });
+                },
+                pageChanged(page) {
+                    this.pageInfo.page = page;
+                    this.query();
+                },
+                hasPermission(path) {
+                    return HasAuth(path);
+                },
+                resetForm(title) {
+                    this.formData = { id: 0, name: '', building: '', capacity: 4 , occupied: 0};
+                    this.dialogTitle = title;
+                    this.dialogVisible = true;
+                    this.$nextTick(() => {
+                        this.$refs.formRef?.resetFields();
+                    });
+                }
+            },
+            mounted() {
+                this.query();
+            }
+        });
+        app.use(ElementPlus, { locale: zhCn }).mount('#app');
+    </script>
+</body>
+</html>

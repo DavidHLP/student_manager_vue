@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Web程序设计综合案例</title>
+    <link rel="stylesheet" href="../../lib/element-plus.css">
+    <link rel="stylesheet" href="../../css/common.css">
+    <script src="../../lib/vue3.4.21.js"></script>
+    <script src="../../lib/element-plus.js"></script>
+    <script src="../../lib/element-plus-zh-cn.js"></script>
+    <script src="../../lib/axios.min.js"></script>
+    <script src="../../lib/http.js"></script>
+    <script src="../../lib/curd.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!--面包屑 高度30-->
+        <el-breadcrumb class="breadcrumb">
+            <el-breadcrumb-item v-for="item in breadcrumb"><el-button link>{{item}}</el-button></el-breadcrumb-item>
+        </el-breadcrumb>
+        <!--工具栏 高度50-->
+        <div id="toolbar">
+            <el-space>
+                <el-space>
+                    <el-button type="default" @click="query">刷新</el-button>
+                </el-space>
+                <el-space>
+                    <el-button type="primary" @click="add" v-if="hasPermission('/api/department/add')">添加</el-button>
+                </el-space>
+            </el-space>
+        </div>
+        <!--内容区 高度 100vh - 180 -->
+        <div id="table">
+            <el-table 
+                :data="tableData" 
+                :default-expand-all="isExpandAll"
+                show-overflow-tooltip
+                border 
+                style="width: 100%" 
+                :default-expand-all="true" 
+                row-key="id"
+            >
+                <el-table-column prop="depName" label="部门名称" width="350" align="center"></el-table-column>
+                <el-table-column prop="id" label="部门编号" width="100" align="center"></el-table-column>
+                <el-table-column prop="status" label="状态" width="100" align="center">
+                    <template #default="scope">
+                        <el-tag type="success" v-if="scope.row.status==1">正常</el-tag>
+                        <el-tag type="default" v-else>禁用</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="remark" label="备注" align="center"></el-table-column>
+                <el-table-column label="操作">
+                    <template #default="scope">
+                        <el-button size="small" type="primary" @click="edit(scope.row)" v-if="hasPermission('/api/department/edit')">编辑</el-button>
+                        <el-button size="small" type="danger"  @click="del(scope.row.id)" v-if="hasPermission('/api/department/del')">删除</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+        <!--分页 高度50-->
+        <div id="pagination" >
+            <!-- <el-pagination background layout="total, prev, pager, next" :total="pageInfo.total" @current-change="pageChanged" /> -->
+        </div>
+        <el-dialog
+            v-model="dialogVisible"
+            :title="dialogTitle"
+            width="500"
+        >
+            <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px" style="max-width: 600px">
+                <el-form-item label="上级部门" prop="pid">
+                    <el-tree-select
+                        v-model="formData.pid"
+                        node-key="id"
+                        :clearable="clearable"
+                        placeholder="部门"
+                        :data="depTreeList"
+                        :render-after-expand="false"
+                        :props="{ label: 'depName', children: 'children' }"
+                        check-strictly
+                    >
+                </el-form-item>
+                <el-form-item label="部门名称" prop="depName">
+                    <el-input v-model="formData.depName" placeholder="部门名称" />
+                </el-form-item>
+                <el-form-item label="状态" prop="status">
+                    <el-radio-group v-model="formData.status">
+                        <el-radio-button :value="1">正常</el-radio-button>
+                        <el-radio-button :value="2">禁用</el-radio-button>
+                    </el-radio-group>
+                </el-form-item>
+                <el-form-item label="备注" prop="remark" v-else>
+                    <el-input type="textarea" :rows="5" v-model="formData.remark" placeholder="备注" />
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <div class="dialog-footer">
+                    <el-button @click="dialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="save">保存</el-button>
+                </div>
+            </template>
+        </el-dialog>
+    </div>
+    <script>
+        const {createApp} = Vue;
+        const app = createApp({
+            data(){
+                return {
+                    breadcrumb:['系统管理','部门管理'],
+                    queryForm:{
+                        dep_name:''
+                    },
+                    pageInfo:{
+                        total: 0,
+                        page: 1,
+                        limit: 10
+                    },
+                    formData:{
+                        id: 0,
+                        pid: '',
+                        remark: '',
+                        depName: '',
+                        status: 1
+                    },
+                    tableData: [],
+                    dialogTitle: '',
+                    dialogVisible: false,
+                    rules: {
+                        depName: [
+                            { required: true, message: '请输入部门', trigger: 'blur' },
+                            { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' }
+                        ]
+                    },
+                    depTreeList:[],
+                    formRef: null
+                }
+            },
+            methods:{
+                add(){
+                    this.formData.id   = 0;
+                    this.dialogTitle   = '添加部门'
+                    this.dialogVisible = true;
+                    Api.getDepartmentList().then(res=>{
+                        this.depTreeList = res.data
+                    })
+                    this.$nextTick(()=>{
+                        this.$refs.formRef.resetFields();
+                    });
+                },
+                edit(row){
+                    this.dialogTitle   = '编辑部门'
+                    this.dialogVisible = true;
+                    this.formData.id = row.id;
+                    this.formData.pid = row.pid==0?'':row.pid;
+                    this.formData.depName = row.depName;
+                    this.formData.status  = row.status;
+                    this.formData.remark  = row.remark;
+                    Api.getDepartmentList().then(res=>{
+                        this.depTreeList = res.data
+                    })
+                },
+                save(){
+                    this.$refs.formRef.validate((valid) => {
+                        if (valid) {
+                            if(this.formData.id==0){
+                                CURD.add()
+                            }else{
+                                CURD.edit()
+                            }
+                        }else{
+                            return false;
+                        }
+                    });
+
+                },
+                del(id){
+                    CURD.del(id);
+                },
+                query(){
+                    CURD.query()
+                },
+                hasPermission(path){
+                    return HasAuth(path);
+                }
+            },
+            mounted(){
+                // 初始化增删改查组件
+                CURD.init(this, Api.getDepartmentList, Api.addDepartment, Api.editDepartment, Api.delDepartment);
+                CURD.query = ()=>{
+                    Api.getDepartmentList().then(res=>{
+                        this.tableData = res.data;
+                    })
+                }
+
+                CURD.query()
+            }
+        });
+        app.use(ElementPlus,{locale:zhCn}).mount('#app');
+    </script>
+</body>
+</html>

@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Web程序设计综合案例</title>
+    <link rel="stylesheet" href="../../lib/element-plus.css">
+    <link rel="stylesheet" href="../../css/common.css">
+    <script src="../../lib/vue3.4.21.js"></script>
+    <script src="../../lib/element-plus.js"></script>
+    <script src="../../lib/element-plus-zh-cn.js"></script>
+    <script src="../../lib/axios.min.js"></script>
+    <script src="../../lib/http.js"></script>
+    <script src="../../lib/curd.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!--面包屑 高度30-->
+        <el-breadcrumb class="breadcrumb">
+            <el-breadcrumb-item v-for="item in breadcrumb"><el-button link>{{item}}</el-button></el-breadcrumb-item>
+        </el-breadcrumb>
+        <!--工具栏 高度50-->
+        <div id="toolbar">
+            <el-space>
+                <el-space>
+                    <el-input v-model="queryForm.realname" placeholder="姓名" clearable style="width:120px;"></el-input>
+                </el-space>
+                <el-space>
+                    <el-select
+                        v-model="queryForm.roleId"
+                        placeholder="角色"
+                        style="width: 120px"
+                        clearable 
+                    >
+                        <el-option label="管理员" :key="1" :value="1">管理员</el-option>
+                        <el-option label="教师" :key="2" :value="2">教师</el-option>
+                        <el-option label="学生" :key="3" :value="3">学生</el-option>
+                    </el-select>
+                </el-space>
+                <el-space>
+                    <el-tree-select
+                        clearable
+                        v-model="queryForm.depId"
+                        node-key="id"
+                        :clearable="clearable"
+                        placeholder="部门"
+                        :data="depTreeList"
+                        style="width: 180px"
+                        :render-after-expand="false"
+                        :props="{ label: 'depName', children: 'children' }"
+                        check-strictly
+                    >
+                </el-space>
+                <el-space>
+                    <el-button type="default" @click="query">查询</el-button>
+                </el-space>
+                <el-space>
+                    <el-button type="primary" @click="add"  v-if="hasPermission('/api/user/add')">添加</el-button>
+                </el-space>
+                <!-- <el-space>
+                    <input type="file" style="display: none" ref="fileInput" @change="handleFileChange">
+                    <el-button type="primary" @click="upload">批量导入</el-button>
+                </el-space> -->
+            </el-space>
+        </div>
+        <!--内容区 高度 100vh - 180 -->
+        <div id="table">
+            <el-table :data="tableData" border style="width: 100%">
+                <el-table-column prop="id" label="ID" width="100" align="center"></el-table-column>
+                <el-table-column prop="roleId" label="角色" width="150" align="center">
+                    <template #default="scope">
+                        <el-tag type="danger" v-if="scope.row.roleId==1">管理员</el-tag>
+                        <el-tag type="primary" v-else-if="scope.row.roleId==2">教师</el-tag>
+                        <el-tag type="success" v-else>学生</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column prop="username" label="账号" width="150" align="center"></el-table-column>
+                <el-table-column prop="realname" label="姓名" width="150" align="center"></el-table-column>
+                <el-table-column prop="depName" label="院系" width="150" align="center"></el-table-column>
+                <el-table-column prop="status" label="状态" width="100" align="center">
+                    <template #default="scope">
+                        <el-tag type="success" v-if="scope.row.status==1">正常</el-tag>
+                        <el-tag type="default" v-else>禁用</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="操作">
+                    <template #default="scope">
+                        <el-button size="small" link type="primary" @click="resetpwd(scope.row.id)" v-if="hasPermission('/api/user/resetpwd')">重置密码</el-button>
+                        <el-button size="small" link type="primary" @click="unlock(scope.row.id)" v-if="hasPermission('/api/user/unlock')">解除锁定</el-button>
+                        <el-button size="small" link type="primary" @click="edit(scope.row)" v-if="hasPermission('/api/user/edit')">编辑</el-button>
+                        <el-button size="small" link type="danger"  @click="del(scope.row.id)" v-if="hasPermission('/api/user/del')">删除</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+        <!--分页 高度50-->
+        <div id="pagination" >
+            <el-pagination 
+                background 
+                layout="total, prev, pager, next" 
+                :total="pageInfo.total" 
+                @current-change="pageChanged">
+            </el-pagination>
+        </div>
+        <el-dialog
+            v-model="dialogVisible"
+            :title="dialogTitle"
+            width="500"
+        >
+            <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px" style="max-width: 600px">
+                <el-form-item label="角色" prop="roleId">
+                    <el-radio-group v-model="formData.roleId">
+                        <el-radio-button :value="1">管理员</el-radio-button>
+                        <el-radio-button :value="2">教师</el-radio-button>
+                        <el-radio-button :value="3">学生</el-radio-button>
+                    </el-radio-group>
+                </el-form-item>
+                <el-form-item label="学号" prop="username" v-if="formData.roleId==3">
+                    <el-input v-model="formData.username" placeholder="学号" />
+                </el-form-item>
+                <el-form-item label="工号" prop="username" v-else>
+                    <el-input v-model="formData.username" placeholder="工号" />
+                </el-form-item>
+                <el-form-item label="姓名" prop="realname">
+                    <el-input v-model="formData.realname" placeholder="姓名" />
+                </el-form-item>
+                <el-form-item label="年级" prop="grade" v-if="formData.roleId==3">
+                    <el-input v-model="formData.grade" placeholder="年级" />
+                </el-form-item>
+                <el-form-item label="班级" prop="className" v-if="formData.roleId==3">
+                    <el-input v-model="formData.className" placeholder="班级" />
+                </el-form-item>
+                <el-form-item label="院系" prop="depId" >
+                    <el-tree-select
+                        v-model="formData.depId"
+                        node-key="id"
+                        :clearable="clearable"
+                        placeholder="部门"
+                        :data="depTreeList"
+                        :render-after-expand="false"
+                        :props="{ label: 'depName', children: 'children' }"
+                        check-strictly
+                    >
+                </el-form-item>
+                <el-form-item label="状态" prop="status">
+                    <el-radio-group v-model="formData.status">
+                        <el-radio-button :value="1">正常</el-radio-button>
+                        <el-radio-button :value="2">禁用</el-radio-button>
+                    </el-radio-group>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <div class="dialog-footer">
+                    <el-button @click="dialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="save">保存</el-button>
+                </div>
+            </template>
+        </el-dialog>
+    </div>
+    <script>
+        const {createApp} = Vue;
+        const app = createApp({
+            data(){
+                return {
+                    breadcrumb:['系统管理','用户管理'],
+                    queryForm:{
+                        realname:'',
+                        roleId:'',
+                        depId:''
+                    },
+                    pageInfo:{
+                        total: 0,
+                        page: 1,
+                        limit: 10
+                    },
+                    formData:{
+                        id: 0,
+                        username: '',
+                        realname: '',
+                        roleId: 3,
+                        status: 1,
+                        depId:''
+                    },
+                    tableData: [],
+                    dialogTitle: '',
+                    dialogVisible: false,
+                    rules: {
+                        username: [
+                            { required: true, message: '请输入账号', trigger: 'blur' },
+                            { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' }
+                        ],
+                        realname: [
+                            { required: true, message: '请输入姓名', trigger: 'blur' },
+                            { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
+                        ],
+                        status: [
+                            { required: true, message: '请选择状态', trigger: 'change' },
+                        ],
+                        roleId: [
+                            { required: true, message: '请选择角色', trigger: 'change' },
+                        ],
+                    },
+                    depTreeList:[],
+                    formRef: null,
+                    fileInput: null
+                }
+            },
+            methods:{
+                add(){
+                    this.formData.id   = 0;
+                    this.dialogTitle   = '添加用户'
+                    this.dialogVisible = true;
+
+                    this.$nextTick(()=>{
+                        this.$refs.formRef.resetFields();
+                    });
+                },
+                upload(){
+                    this.$refs.fileInput.click();
+                },
+                handleFileChange(event) {
+                    const file = event.target.files[0];
+                    if (!file) {
+                        ElMessage.error('请选择文件');
+                        return;
+                    }
+                    // 创建FormData对象处理文件上传
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    Api.importUserApiUrl(formData).then(res=>{
+                        ElMessage.success("导入成功")
+                    })
+                },
+                edit(row){
+                    this.dialogTitle   = '编辑用户'
+                    this.dialogVisible = true;
+
+                    this.formData = Object.assign(this.formData, row);
+                },
+                save(){
+                    this.$refs.formRef.validate((valid) => {
+                        if (valid) {
+                            if(this.formData.id==0){
+                                CURD.add()
+                            }else{
+                                CURD.edit()
+                            }
+                        }else{
+                            return false;
+                        }
+                    });
+
+                },
+                del(id){
+                    CURD.del(id);
+                },
+                query(){
+                    CURD.query()
+                },
+                pageChanged(page){
+                    this.pageInfo.page = page;
+                    CURD.query()
+                },
+                resetpwd(id){
+                    Api.resetUserPwd(id).then(res=>{
+                        ElMessage.success("密码已被重置成123456")
+                    })
+                },
+                unlock(id){
+                    Api.resetUserUnlock(id).then(res=>{
+                        ElMessage.success("该用户已解锁")
+                    })
+                },
+                hasPermission(path){
+                    return HasAuth(path);
+                }
+            },
+            mounted(){
+                // 初始化增删改查组件
+                CURD.init(this, 
+                    Api.getUserList, 
+                    Api.addUser, 
+                    Api.editUser, 
+                    Api.delUser
+                );
+                CURD.query()
+
+                Api.getDepartmentList().then(res=>{
+                    this.depTreeList = res.data;
+                })
+            }
+        });
+        app.use(ElementPlus,{locale:zhCn}).mount('#app');
+    </script>
+</body>
+</html>

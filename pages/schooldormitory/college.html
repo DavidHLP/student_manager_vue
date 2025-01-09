@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>书院管理</title>
+    <link rel="stylesheet" href="../../lib/element-plus.css">
+    <link rel="stylesheet" href="../../css/common.css">
+    <script src="../../lib/vue3.4.21.js"></script>
+    <script src="../../lib/element-plus.js"></script>
+    <script src="../../lib/element-plus-zh-cn.js"></script>
+    <script src="../../lib/axios.min.js"></script>
+    <script src="../../lib/http.js"></script>
+    <script src="../../lib/curd.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!-- 面包屑 -->
+        <el-breadcrumb class="breadcrumb">
+            <el-breadcrumb-item v-for="item in breadcrumb" :key="item">
+                <el-button link>{{ item }}</el-button>
+            </el-breadcrumb-item>
+        </el-breadcrumb>
+
+        <!-- 工具栏 -->
+        <div id="toolbar">
+            <el-space>
+                <el-input v-model="queryForm.collegeName" placeholder="书院名称" clearable></el-input>
+                <el-button type="default" @click="query" v-if="hasPermission('/api/college/list')">查询</el-button>
+                <el-button type="primary" @click="add" v-if="hasPermission('/api/college/add')">添加</el-button>
+            </el-space>
+        </div>
+
+        <!-- 数据表 -->
+        <div id="table">
+            <el-table :data="tableData" border style="width: 100%">
+                <el-table-column prop="id" label="ID" width="100" align="center"></el-table-column>
+                <el-table-column prop="name" label="书院名称" align="center"></el-table-column>
+                <el-table-column prop="departmentName" label="所属部门" align="center"></el-table-column>
+                <el-table-column prop="description" label="书院描述" align="center"></el-table-column>
+                <el-table-column label="操作" align="center">
+                    <template #default="scope">
+                        <el-button size="small" link type="primary" @click="edit(scope.row)" v-if="hasPermission('/api/college/edit')">编辑</el-button>
+                        <el-button size="small" link type="danger" @click="confirmDel(scope.row.id)" v-if="hasPermission('/api/college/del')">删除</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+            <!-- 分页 -->
+            <div id="pagination" style="display: flex; justify-content: flex-start; align-items: center; margin-top: 10px;">
+                <el-pagination
+                    background
+                    layout="total, sizes, prev, pager, next"
+                    :total="pageInfo.total"
+                    :page-size="pageInfo.limit"
+                    :page-sizes="[5, 10, 20, 50]"
+                    :current-page="pageInfo.page"
+                    @size-change="pageSizeChanged"
+                    @current-change="pageChanged"
+                />
+            </div>
+        </div>
+
+        <!-- 弹窗 -->
+        <el-dialog v-model="dialogVisible" :title="dialogTitle" width="500">
+            <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px">
+                <!-- 书院名称 -->
+                <el-form-item label="书院名称" prop="name">
+                    <el-input v-model="formData.name" placeholder="书院名称" />
+                </el-form-item>
+        
+                <!-- 所属部门 -->
+                <el-form-item label="所属部门" prop="departmentId">
+                    <el-select v-model="formData.departmentId" placeholder="请选择书院">
+                        <el-option
+                            v-for="dept in deptData"
+                            :key="dept.id"
+                            :label="dept.depName"
+                            :value="dept.id"
+                        />
+                    </el-select>
+                </el-form-item>
+        
+                <!-- 书院描述 -->
+                <el-form-item label="书院描述" prop="description">
+                    <el-input type="textarea" v-model="formData.description" placeholder="书院描述" />
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <el-button @click="dialogVisible = false">取消</el-button>
+                <el-button type="primary" @click="save">保存</el-button>
+            </template>
+        </el-dialog>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        const app = createApp({
+            data() {
+                return {
+                    breadcrumb: ['学校书院管理', '书院管理'],
+                    queryForm: { collegeName: '' },
+                    pageInfo: { total: 0, page: 1, limit: 10 },
+                    formData: { id: 0, name: '', department: '', description: '' },
+                    tableData: [],
+                    deptData:[],
+                    dialogTitle: '',
+                    dialogVisible: false,
+                    rules: {
+                        name: [
+                            { required: true, message: '请输入书院名称', trigger: 'blur' },
+                            { min: 2, max: 50, message: '长度在 2 到 50 个字符', trigger: 'blur' }
+                        ],
+                        department: [
+                            { required: true, message: '请输入所属部门', trigger: 'blur' }
+                        ]
+                    }
+                };
+            },
+            methods: {
+                query() {
+                    // 获取部门数据
+                    Api.getAllDept().then((res) => {
+                        this.deptData = res.data; // 设置部门数据
+                        this.deptData.forEach((item) => {
+                            item.id = String(item.id);
+                        });
+                        this.loadTableData(); // 加载表格数据
+                    }).catch((err) => {
+                        console.error("获取部门数据失败:", err);
+                        this.deptData = [];
+                        this.loadTableData(); // 如果获取部门数据失败，仍然加载表格数据（可能显示 '未知部门'）
+                    });
+                },
+                
+                // 用于加载表格数据的方法
+                loadTableData() {
+                    const params = {
+                        page: this.pageInfo.page,
+                        limit: this.pageInfo.limit,
+                        collegeName: this.queryForm.collegeName
+                    };
+                    
+                    Api.getCollegeList(params).then((res) => {
+                        this.tableData = res.data.list || [];
+                        this.pageInfo.total = res.data.total || 0;
+                        this.tableData.forEach((item) => {
+                            item.departmentId = String(item.departmentId);
+                            item.departmentName = this.getDepartmentName(item.departmentId);
+                        });
+                    }).catch((err) => {
+                        console.error("获取书院列表失败:", err);
+                        this.tableData = [];
+                    });
+                },
+
+                // 获取部门名称的方法
+                getDepartmentName(departmentId) {
+                    const dept = this.deptData.find(dept => String(dept.id) === String(departmentId));
+                    return dept ? dept.depName : '未知部门';
+                },
+                add() {
+                    this.resetForm('添加书院');
+                },
+                edit(row) {
+                    this.formData = { ...row };
+                    this.dialogTitle = '编辑书院';
+                    this.dialogVisible = true;
+                },
+                save() {
+                    this.$refs.formRef.validate((valid) => {
+                        if (valid) {
+                            const action = this.dialogTitle === '添加书院' ? Api.addCollege : Api.editCollege;
+                            action(this.formData).then((res) => {
+                                if (res.code == 200) {
+                                    this.$message.success('操作成功');
+                                    this.dialogVisible = false;
+                                    this.query();
+                                }
+                            });
+                        }
+                    });
+                },
+                confirmDel(id) {
+                    this.$confirm('确定删除该书院吗？', '提示', {
+                        confirmButtonText: '确定',
+                        cancelButtonText: '取消',
+                        type: 'warning'
+                    }).then(() => {
+                        Api.delCollege(id).then(() => this.query());
+                    });
+                },
+                pageChanged(page) {
+                    this.pageInfo.page = page;
+                    this.query();
+                },
+                hasPermission(path) {
+                    return HasAuth(path);
+                },
+                resetForm(title) {
+                    this.formData = { id: 0, name: '', department: '', description: '' };
+                    this.dialogTitle = title;
+                    this.dialogVisible = true;
+                    this.$nextTick(() => {
+                        this.$refs.formRef?.resetFields();
+                    });
+                }
+            },
+            mounted() {
+                this.query();
+            }
+        });
+        app.use(ElementPlus, { locale: zhCn }).mount('#app');
+    </script>
+</body>
+</html>

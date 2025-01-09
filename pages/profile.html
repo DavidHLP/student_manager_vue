@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Web程序设计综合案例</title>
+    <link rel="stylesheet" href="../../lib/element-plus.css">
+    <link rel="stylesheet" href="../../css/common.css">
+    <script src="../../lib/vue3.4.21.js"></script>
+    <script src="../../lib/element-plus.js"></script>
+    <script src="../../lib/element-plus-zh-cn.js"></script>
+    <script src="../../lib/axios.min.js"></script>
+    <script src="../../lib/http.js"></script>
+
+    <style>
+        .profile-card .avatar {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+        }
+        .profile-card ul{
+            list-style: none;
+            padding: 0;
+        }
+        
+        .profile-card ul li {
+            padding: 12px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size:14px;
+        }
+        
+        .profile-card ul li span {
+            float: right;
+        }
+    </style>
+
+</head>
+<body>
+    <div id="app">
+        <el-row :gutter="20">
+            <el-col :span="8">
+                <el-card class="profile-card">
+                    <template #header> 个人信息 </template>
+                    <div class="avatar">
+                        <img class="avatar-img" src="../../img/avatar.png" alt="头像">
+                    </div>
+                    <ul v-if="userinfo!=null">
+                        <li>
+                            <ma-icon icon="icon-user" /> {{userinfo.roleId==3?"学号":"工号"}}
+                            <span>{{userinfo.username}}</span>
+                        </li>
+                        <li>
+                            <ma-icon icon="icon-idcard" /> 姓名
+                            <span>{{userinfo.realname}}</span>
+                        </li>
+                        <li>
+                            <ma-icon icon="icon-idcard" /> 角色
+                            <span>
+                                <el-tag v-if="userinfo.roleId==1" type="primary">管理员</el-tag>
+                                <el-tag v-if="userinfo.roleId==2" type="primary">老师</el-tag>
+                                <el-tag v-if="userinfo.roleId==3" type="primary">学生</el-tag>
+                            </span>
+                        </li>
+                        <li>
+                            <ma-icon icon="icon-idcard" /> 所在院系
+                            <span>{{userinfo.depName}}</span>
+                        </li>
+                    </ul>
+                </el-card>
+            </el-col>
+            <el-col :span="16">
+                <el-card>
+                    <template #header> 基本信息 </template>
+                    <el-tabs v-model="activeName">
+                        <el-tab-pane label="修改密码" name="password">
+                            <el-form ref="dataFormRef" :model="dataForm" :rules="dataRules" label-width="100px" >
+                                <el-form-item prop="newPassword" :label="'新密码'">
+                                    <el-input v-model="dataForm.newPassword" type="password" show-password></el-input>
+                                </el-form-item>
+                                <el-form-item prop="confirmPassword" :label="'确认密码'">
+                                    <el-input v-model="dataForm.confirmPassword" type="password" show-password></el-input>
+                                </el-form-item>
+                                <el-form-item>
+                                    <el-button type="primary" @click="handleDataForm">修改密码</el-button>
+                                </el-form-item>
+                            </el-form>
+                        </el-tab-pane>
+                    </el-tabs>
+                </el-card>
+            </el-col>
+        </el-row>
+        
+    </div>
+    <script>
+        
+        const {createApp} = Vue;
+        const app = createApp({
+            data(){
+                return {
+                    userinfo: null,
+                    dataForm:{
+                        newPassword: "",
+                        confirmPassword: "",
+                    },
+                    dataFormRef:null, 
+                    dataRules:{
+                        newPassword: [{ required: true, message: '密码不能为空', trigger: 'blur' }],
+	                    confirmPassword: [{ required: true, validator: this.validatePassword, trigger: 'blur' }],
+                    },
+                    activeName: "password",
+                }
+            },
+            methods:{
+                validatePassword(rule, value, callback){
+                    if (value.length < 4) {
+                        callback(new Error('密码不能小于4位数'))
+                    } else {
+                        callback()
+                    }
+                },
+                handleDataForm(){
+                    this.$refs.dataFormRef.validate((valid) => {
+                        if (valid) {
+                            if(this.dataForm.newPassword!= this.dataForm.confirmPassword){
+                                ElMessage.error("两次密码不一致");
+                                return;
+                            }
+                            Api.updatePwd(this.dataForm).then(res=>{
+                                ElMessage.success("修改成功");
+                                this.dataForm = {
+                                    newPassword: "",
+                                    confirmPassword: "",
+                                }
+                            })
+                        } 
+                    })
+                }
+            },
+            mounted(){
+                Api.getUserInfo().then(res=>{
+                    this.userinfo = res.data;
+                })
+            }
+        });
+        app.use(ElementPlus,{locale:zhCn}).mount('#app');
+    </script>
+</body>
+</html>
