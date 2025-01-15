@@ -1,122 +1,248 @@
-<script>
-    const { createApp } = Vue;
-    const app = createApp({
-        data() {
-            return {
-                breadcrumb: ['宿舍管理', '宿舍列表'],
-                queryForm: { dormitoryName: '' },
-                pageInfo: { total: 0, page: 1, limit: 10 },
-                formData: { id: 0, name: '', building: '', capacity: 4 },
-                tableData: [],
-                dialogTitle: '',
-                dialogVisible: false,
-                rules: {
-                    name: [
-                        { required: true, message: '请输入宿舍名称', trigger: 'blur' },
-                        { min: 2, max: 20, message: '长度在 2 到 20 个字符', trigger: 'blur' }
-                    ],
-                    building: [
-                        { required: true, message: '请输入楼栋', trigger: 'blur' }
-                    ],
-                    capacity: [
-                        { required: true, message: '请输入容纳人数', trigger: 'change' }
-                    ]
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Web程序设计综合案例</title>
+    <link rel="stylesheet" href="../../lib/element-plus.css">
+    <link rel="stylesheet" href="../../css/common.css">
+    <script src="../../lib/vue3.4.21.js"></script>
+    <script src="../../lib/element-plus.js"></script>
+    <script src="../../lib/element-plus-zh-cn.js"></script>
+    <script src="../../lib/axios.min.js"></script>
+    <script src="../../lib/http.js"></script>
+    <script src="../../lib/curd.js"></script>
+</head>
+<body>
+    <div id="app">
+        <!--面包屑 高度30-->
+        <el-breadcrumb class="breadcrumb">
+            <el-breadcrumb-item v-for="item in breadcrumb"><el-button link>{{item}}</el-button></el-breadcrumb-item>
+        </el-breadcrumb>
+        <!--工具栏 高度50-->
+        <div id="toolbar">
+            <el-space>
+                <el-space>
+                    <el-input v-model="queryForm.realname" placeholder="课程名称" clearable></el-input>
+                </el-space>
+                <el-space>
+                    <el-button type="default" @click="query">查询</el-button>
+                </el-space>
+                <el-space>
+                    <el-button type="primary" @click="add"  v-if="hasPermission('/api/course/add')">添加</el-button>
+                </el-space>
+            </el-space>
+        </div>
+        <!--内容区 高度 100vh - 180 -->
+        <div id="table">
+            <el-table :data="tableData" border style="width: 100%">
+                <el-table-column prop="id" label="ID" width="100" align="center"></el-table-column>
+                <el-table-column prop="courseName" label="课程名称" align="center"></el-table-column>
+                <el-table-column prop="term" label="学期" align="center"></el-table-column>
+                <el-table-column prop="courseTime" label="上课时间" align="center"></el-table-column>
+                <el-table-column prop="location" label="上课地点" align="center"></el-table-column>
+                <el-table-column prop="realname" label="上课教师" align="center"></el-table-column>
+                <el-table-column prop="credit" label="学分" align="center"></el-table-column>
+                <el-table-column prop="capacity" label="限选人数" align="center"></el-table-column>
+                <el-table-column prop="status" label="状态" align="center">
+                    <template #default="scope">
+                        <el-tag type="default" v-if="scope.row.status==0">未发布</el-tag>
+                        <el-tag type="primary" v-else-if="scope.row.status==1">开放选课</el-tag>
+                        <el-tag type="success" v-else>结束选课</el-tag>
+                    </template>
+                </el-table-column>
+                <el-table-column label="操作">
+                    <template #default="scope">
+                        <el-button size="small" link type="success" @click="courseDetail(scope.row.id)" v-if="hasPermission('/api/course/list')">选课情况</el-button>
+                        <el-button size="small" link type="primary" @click="edit(scope.row)" v-if="hasPermission('/api/course/edit')">编辑</el-button>
+                        <el-button size="small" link type="danger"  @click="del(scope.row.id)" v-if="hasPermission('/api/course/del')">删除</el-button>
+                    </template>
+                </el-table-column>
+            </el-table>
+        </div>
+        <!--分页 高度50-->
+        <div id="pagination" >
+            <el-pagination background layout="total, prev, pager, next" :total="pageInfo.total" @current-change="pageChanged" />
+        </div>
+        <el-dialog
+            v-model="dialogVisible"
+            :title="dialogTitle"
+            width="500"
+        >
+            <el-form :model="formData" :rules="rules" ref="formRef" label-width="100px" style="max-width: 600px">
+                <el-form-item label="课程名称" prop="courseName">
+                    <el-input v-model="formData.courseName" placeholder="课程名称" />
+                </el-form-item>
+                <el-form-item label="学期" prop="term" v-else>
+                    <el-select v-model="formData.term" placeholder="学期">
+                      <el-option
+                        v-for="item in TermList"
+                        :key="item.termName"
+                        :label="item.termName"
+                        :value="item.termName"
+                      />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="上课时间" prop="courseTime" v-else>
+                    <el-input v-model="formData.courseTime" placeholder="上课时间" />
+                </el-form-item>
+                <el-form-item label="上课地点" prop="location">
+                    <el-input v-model="formData.location" placeholder="上课地点" />
+                </el-form-item>
+                <el-form-item label="学分" prop="credit">
+                    <el-input-number v-model="formData.credit" placeholder="学分" />
+                </el-form-item>
+                <el-form-item label="限选人数" prop="capacity">
+                    <el-input-number v-model="formData.capacity" placeholder="限选人数" />
+                </el-form-item>
+                <el-form-item label="课程简介" prop="remark">
+                    <el-input type="textarea" :rows="5" v-model="formData.remark" placeholder="限选人数" />
+                </el-form-item>
+                <el-form-item label="状态" prop="status">
+                    <el-radio-group v-model="formData.status">
+                        <el-radio-button :value="0">未发布</el-radio-button>
+                        <el-radio-button :value="1">开放选课</el-radio-button>
+                        <el-radio-button :value="2">结束选课</el-radio-button>
+                    </el-radio-group>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <div class="dialog-footer">
+                    <el-button @click="dialogVisible = false">取消</el-button>
+                    <el-button type="primary" @click="save">保存</el-button>
+                </div>
+            </template>
+        </el-dialog>
+        <el-drawer v-model="showCourseDetail" title="选课详情" size="95%">
+            <div id="table">
+                <el-table :data="studentList" border style="width: 100%">
+                    <el-table-column prop="username" label="学号" align="center"></el-table-column>
+                    <el-table-column prop="realname" label="姓名" align="center"></el-table-column>
+                    <el-table-column prop="enrollmentTime" label="选课时间" align="center"></el-table-column>
+                    <el-table-column prop="status" label="状态" align="center">
+                        <template #default="scope">
+                            <el-tag type="default" v-if="scope.row.status==1">待确认</el-tag>
+                            <el-tag type="primary" v-else-if="scope.row.status==2">已确认</el-tag>
+                            <el-tag type="success" v-else></el-tag>
+                        </template>
+                    </el-table-column>
+                    <el-table-column label="操作">
+                        <template #default="scope">
+                            <el-button size="small" type="primary" @click="confirm(scope.row.studentId, scope.row.courseId, 1)" v-if="scope.row.status==1">确认</el-button>
+                            <el-button size="small" type="danger"  @click="confirm(scope.row.studentId, scope.row.courseId, 2)" v-if="scope.row.status==1">退选</el-button>
+                        </template>
+                    </el-table-column>
+                </el-table>
+            </div>
+        </el-drawer>
+    </div>
+    <script>
+        const {createApp} = Vue;
+        const app = createApp({
+            data(){
+                return {
+                    breadcrumb:['选课','课程管理'],
+                    queryForm:{
+                        course_name:''
+                    },
+                    pageInfo:{
+                        total: 0,
+                        page: 1,
+                        limit: 10
+                    },
+                    formData:{
+                        id: 0,
+                        courseName: '',
+                        courseTime: '',
+                        location: '',
+                        status: 1,
+                        credit:2,
+                        capacity:50,
+                        remark:'',
+                        term:''
+                    },
+                    tableData: [],
+                    studentList: [],
+                    dialogTitle: '',
+                    dialogVisible: false,
+                    rules: {
+                        courseName: [
+                            { required: true, message: '请输入课程名称', trigger: 'blur' },
+                            { min: 3, max: 20, message: '长度在 3 到 20 个字符', trigger: 'blur' }
+                        ],
+                        status: [
+                            { required: true, message: '请选择状态', trigger: 'change' },
+                        ]
+                    },
+                    formRef: null,
+                    TermList:[],
+                    showCourseDetail: false
                 }
-            };
-        },
-        methods: {
-            query() {
-                // 发起 API 请求
-                axios
-                    .get('/api/dormitory/list', {
-                        params: {
-                            page: this.pageInfo.page,
-                            limit: this.pageInfo.limit,
-                            dormitoryName: this.queryForm.dormitoryName
-                        }
+            },
+            methods:{
+                courseDetail(courseId){
+                    Api.getCourseStudentsList(courseId).then(res=>{
+                        this.showCourseDetail = true;
+                        this.studentList = res.data;
                     })
-                    .then((response) => {
-                        const res = response.data;
-                        if (res.code === 200) {
-                            this.tableData = res.data.list; // 表格数据
-                            this.pageInfo.total = res.data.total; // 总记录数
-                        } else {
-                            this.$message.error(res.msg || '查询失败');
-                        }
+                },
+                confirm(studentId, courseId, action){
+                    Api.confirmCourseStudent({studentId:studentId, courseId:courseId, action:action}).then(res=>{
+                        ElMessage.success(res.msg);
+                        Api.getCourseStudentsList(courseId).then(res=>{this.studentList = res.data;})
                     })
-                    .catch((error) => {
-                        console.error(error);
-                        this.$message.error('服务器错误，请稍后再试');
+                },
+                add(){
+                    this.formData.id   = 0;
+                    this.dialogTitle   = '添加课程'
+                    this.dialogVisible = true;
+                    this.$nextTick(()=>{
+                        this.$refs.formRef.resetFields();
                     });
-            },
-            add() {
-                this.dialogTitle = '添加宿舍';
-                this.formData = { id: 0, name: '', building: '', capacity: 4 };
-                this.dialogVisible = true;
-            },
-            edit(row) {
-                this.dialogTitle = '编辑宿舍';
-                this.formData = { ...row };
-                this.dialogVisible = true;
-            },
-            save() {
-                this.$refs.formRef.validate((valid) => {
-                    if (valid) {
-                        const api = this.formData.id === 0 ? '/api/dormitory/add' : '/api/dormitory/edit';
-                        axios
-                            .post(api, this.formData)
-                            .then((response) => {
-                                const res = response.data;
-                                if (res.code === 200) {
-                                    this.$message.success('保存成功');
-                                    this.dialogVisible = false;
-                                    this.query();
-                                } else {
-                                    this.$message.error(res.msg || '保存失败');
-                                }
-                            })
-                            .catch((error) => {
-                                console.error(error);
-                                this.$message.error('服务器错误，请稍后再试');
-                            });
-                    }
-                });
-            },
-            del(id) {
-                this.$confirm('确认删除该宿舍？', '提示', {
-                    confirmButtonText: '确定',
-                    cancelButtonText: '取消',
-                    type: 'warning'
-                }).then(() => {
-                    axios
-                        .post('/api/dormitory/del', { id })
-                        .then((response) => {
-                            const res = response.data;
-                            if (res.code === 200) {
-                                this.$message.success('删除成功');
-                                this.query();
-                            } else {
-                                this.$message.error(res.msg || '删除失败');
-                            }
-                        })
-                        .catch((error) => {
-                            console.error(error);
-                            this.$message.error('服务器错误，请稍后再试');
-                        });
-                });
-            },
-            pageChanged(page) {
-                this.pageInfo.page = page;
-                this.query();
-            },
-            hasPermission(path) {
-                return true; // 模拟权限逻辑，可以根据实际需要实现
-            }
-        },
-        mounted() {
-            this.query(); // 初始化加载数据
-        }
-    });
+                },
+                edit(row){
+                    this.dialogTitle   = '编辑课程'
+                    this.dialogVisible = true;
 
-    app.use(ElementPlus, { locale: zhCn }).mount('#app');
-</script>
+                    this.formData = Object.assign(this.formData, row);
+                },
+                save(){
+                    this.$refs.formRef.validate((valid) => {
+                        if (valid) {
+                            if(this.formData.id==0){
+                                CURD.add()
+                            }else{
+                                CURD.edit()
+                            }
+                        }else{
+                            return false;
+                        }
+                    });
+
+                },
+                del(id){
+                    CURD.del(id);
+                },
+                query(){
+                    CURD.query()
+                },
+                pageChanged(page){
+                    this.pageInfo.page = page;
+                    CURD.query()
+                },
+                hasPermission(path){
+                    return HasAuth(path);
+                }
+            },
+            mounted(){
+                // 初始化增删改查组件
+                CURD.init(this, Api.getCourseList, Api.addCourse, Api.editCourse, Api.delCourse);
+                CURD.query()
+                Api.getTermList().then(res=>{
+                    this.TermList = res.data.rows;
+                })
+            }
+        });
+        app.use(ElementPlus,{locale:zhCn}).mount('#app');
+    </script>
+</body>
+</html>

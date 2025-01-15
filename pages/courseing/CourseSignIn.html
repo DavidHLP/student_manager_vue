@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>课程签到</title>
+    <link rel="stylesheet" href="../../lib/element-plus.css">
+    <link rel="stylesheet" href="../../css/common.css">
+    <script src="../../lib/vue3.4.21.js"></script>
+    <script src="../../lib/element-plus.js"></script>
+    <script src="../../lib/element-plus-zh-cn.js"></script>
+    <script src="../../lib/axios.min.js"></script>
+    <script src="../../lib/http.js"></script>
+    <script src="../../lib/curd.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #e3f2fd;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            box-sizing: border-box;
+        }
+        #app {
+            width: 100%;
+            max-width: 1200px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: box-shadow 0.3s;
+            box-sizing: border-box;
+        }
+        #app:hover {
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+        }
+        .title {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+        .status-button-group {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .status-button {
+            flex: 1;
+            min-width: 40px;
+            padding: 10px;
+        }
+        .el-space {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+        .el-table {
+            width: 100%;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="title">课程签到</div>
+
+        <el-space>
+            <el-select v-model="selectedCourse" placeholder="选择课程" style="min-width: 220px;" @change="fetchStudents">
+                <el-option v-for="course in courseList" :key="course.id" :label="course.courseName" :value="course.id"></el-option>
+            </el-select>
+            <el-button type="warning" @click="clearSelection">清除选择</el-button>
+            <el-button type="success" @click="submitAttendance">提交签到结果</el-button>
+        </el-space>
+
+        <el-table :data="studentList" border style="width: 100%; margin-top: 20px;">
+            <el-table-column prop="username" label="学号" width="100" align="center"></el-table-column>
+            <el-table-column prop="realname" label="学生姓名" align="center"></el-table-column>
+            <el-table-column prop="className" label="班级" align="center"></el-table-column>
+            <el-table-column prop="status" label="当前状态" align="center">
+                <template #default="scope">
+                    <span v-if="scope.row.status === 'onTime'">✅ 签到成功</span>
+                    <span v-else-if="scope.row.status === 'late'">⚠️ 迟到</span>
+                    <span v-else-if="scope.row.status === 'leaveEarly'">🕗 早退</span>
+                    <span v-else-if="scope.row.status === 'absent'">❌ 旷课</span>
+                    <span v-else>未知状态</span>
+                </template>
+            </el-table-column>
+            <el-table-column label="签到状态" align="center">
+                <template #default="scope">
+                    <div class="status-button-group">
+                        <el-button class="status-button" type="success" @click="markAttendance(scope.row, 'onTime')">准时</el-button>
+                        <el-button class="status-button" type="warning" @click="markAttendance(scope.row, 'late')">迟到</el-button>
+                        <el-button class="status-button" type="info" @click="markAttendance(scope.row, 'leaveEarly')">早退</el-button>
+                        <el-button class="status-button" type="danger" @click="markAttendance(scope.row, 'absent')">旷课</el-button>
+                    </div>
+                </template>
+            </el-table-column>
+        </el-table>        
+
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        const app = createApp({
+            data() {
+                return {
+                    selectedCourse: '',
+                    courseList: [],
+                    studentList: []
+                };
+            },
+            methods: {
+                fetchStudents() {
+                    if (this.selectedCourse) {
+                        Api.getAllStudentByCourseId(this.selectedCourse).then((res) => {
+                            this.studentList = res.data;
+                            this.studentList.forEach(student => {
+                                student.courseId = this.selectedCourse;
+                                student.studentId = student.id;
+                            });
+                        }).catch((err) => {
+                            this.$message.error('Failed to fetch students:', err);
+                        });
+                    }
+                },
+                clearSelection() {
+                    this.selectedCourse = '';
+                    this.studentList = [];
+                },
+                markAttendance(student, status) {
+                    student.status = status;
+                    this.$message.success(`已标记 ${student.realname} 为 ${status}`);
+                },
+                submitAttendance() {
+                        Api.insertAttendance(this.studentList).then((res) => {
+                            if (res.code === 200) {
+                                this.$message.success(res.msg);
+                            } else {
+                                this.$message.error(res.msg || '提交签到失败');
+                            }
+                        }).catch((err) => {
+                            this.$message.error(`提交签到失败: ${err.message}`);
+                        });
+                },
+                query() {
+                    Api.getAllStudentCourse(localStorage.getItem('UserId')).then((res) => {
+                        this.courseList = res.data || [];
+                    }).catch((err) => {
+                        this.$message.error("加载课程失败:", err);
+                        this.courseList = [];
+                    });
+                }
+            },
+            mounted() {
+                this.query();
+            }
+        });
+        app.use(ElementPlus, { locale: zhCn }).mount('#app');
+    </script>
+</body>
+</html>

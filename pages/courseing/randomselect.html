@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>随机选人</title>
+    <link rel="stylesheet" href="../../lib/element-plus.css">
+    <link rel="stylesheet" href="../../css/common.css">
+    <script src="../../lib/vue3.4.21.js"></script>
+    <script src="../../lib/element-plus.js"></script>
+    <script src="../../lib/element-plus-zh-cn.js"></script>
+    <script src="../../lib/axios.min.js"></script>
+    <script src="../../lib/http.js"></script>
+    <script src="../../lib/curd.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #e3f2fd;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        #app {
+            max-width: 800px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: box-shadow 0.3s;
+        }
+        #app:hover {
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+        }
+        #toolbar {
+            margin-bottom: 20px;
+        }
+        .breadcrumb {
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        .el-button {
+            font-size: 16px;
+            padding: 12px 24px;
+            border-radius: 10px;
+        }
+        .el-alert {
+            font-size: 20px;
+            padding: 15px;
+        }
+        .el-select {
+            width: 220px;
+        }
+        .el-table {
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+        }
+        .title {
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="title">随机选人</div>
+
+        <div id="toolbar">
+            <el-space>
+                <el-select v-model="selectedCourse" placeholder="选择课程" style="width: 220px;" @change="courseSelected">
+                    <el-option v-for="course in courseList" :key="course.id" :label="course.courseName" :value="course.id"></el-option>
+                </el-select>
+                <el-button type="primary" @click="selectRandomStudent" :disabled="!selectedCourse">随机选人</el-button>
+                <el-button type="warning" @click="clearSelection">清除选择</el-button>
+            </el-space>
+        </div>
+
+        <el-table :data="studentList" border style="width: 100%; margin-top: 20px;">
+            <el-table-column prop="username" label="ID" width="100" align="center"></el-table-column>
+            <el-table-column prop="realname" label="学生姓名" align="center"></el-table-column>
+            <el-table-column prop="className" label="班级" align="center"></el-table-column>
+        </el-table>
+
+        <div v-if="selectedStudent" style="margin-top: 20px; text-align: center;">
+            <el-alert :title="`选中的学生是: ${selectedStudent.realname}, 班级: ${selectedStudent.className}, 课程: ${selectedCourseName}`" type="success" show-icon></el-alert>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        const app = createApp({
+            data() {
+                return {
+                    studentList: [],
+                    selectedStudent: null,
+                    selectedCourse: '',
+                    selectedCourseName: '',
+                    animating: false,
+                    courseList: []
+                };
+            },
+            methods: {
+                selectRandomStudent() {
+                    if (this.studentList.length > 0) {
+                        this.animating = true;
+                        let counter = 0;
+                        const animationInterval = setInterval(() => {
+                            const randomIndex = Math.floor(Math.random() * this.studentList.length);
+                            this.selectedStudent = this.studentList[randomIndex];
+                            counter++;
+                            if (counter > 10) {
+                                clearInterval(animationInterval);
+                                this.animating = false;
+                            }
+                        }, 100);
+                    } else {
+                        this.$message.warning('没有可选学生，请先选择课程并加载学生数据');
+                    }
+                },
+                clearSelection() {
+                    this.selectedCourse = '';
+                    this.selectedCourseName = '';
+                    this.selectedStudent = null;
+                    this.studentList = [];
+                },
+                courseSelected() {
+                    const selectedCourseObj = this.courseList.find(course => course.id === this.selectedCourse);
+                    this.selectedCourseName = selectedCourseObj ? selectedCourseObj.courseName : '';
+
+                    if (this.selectedCourse) {
+                        Api.getAllStudentByCourseId(this.selectedCourse)
+                            .then(res => {
+                                this.studentList = res.data;
+                                this.selectedStudent = null;
+                            })
+                            .catch(error => console.error('Error fetching students:', error));
+                    }
+                },
+                query() {
+                    Api.getAllStudentCourse(localStorage.getItem('UserId')).then((res) => {
+                        this.courseList = res.data || [];
+                    }).catch((err) => {
+                        console.error("Query failed:", err);
+                        this.courseList = [];
+                    });
+                },
+            },
+            mounted() {
+                this.query();
+            }
+        });
+        app.use(ElementPlus, { locale: zhCn }).mount('#app');
+    </script>
+</body>
+</html>
